@@ -74,7 +74,7 @@ static void error(const char *format, ...)
 int custom_parse(const char *line, char **chr_beg, char **chr_end, hts_pos_t *beg, hts_pos_t *end, void *payload, void *usr)
 {
     // Use the standard parser for CHROM,FROM,TO
-    int i, ret = regidx_parse_tab(line,chr_beg,chr_end,beg,end,NULL,NULL);
+    int i, ret = regidx_parse_tab(line,chr_beg,chr_end,beg,end,NULL,NULL,NULL,NULL,NULL,NULL);
     if ( ret!=0 ) return ret;
 
     // Skip the fields that were parsed above
@@ -271,7 +271,7 @@ void test_explicit(char *tgt, char *qry, char *exp)
 
         char *chr_beg, *chr_end;
         hts_pos_t reg_beg, reg_end;
-        if ( regidx_parse_reg(str.s, &chr_beg, &chr_end, &reg_beg, &reg_end, NULL, NULL)!=0 ) error("could not parse: %s in %s\n", str.s, qry);
+        if ( regidx_parse_reg(str.s, &chr_beg, &chr_end, &reg_beg, &reg_end, NULL, NULL, NULL, NULL, NULL, NULL)!=0 ) error("could not parse: %s in %s\n", str.s, qry);
         chr_end[1] = 0;
         int hit = regidx_overlap(idx,chr_beg,reg_beg,reg_end,NULL);
         if ( *exp=='1' )

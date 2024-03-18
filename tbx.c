@@ -56,7 +56,7 @@ const tbx_conf_t tbx_conf_vcf = { TBX_VCF, 1, 2, 0, '#', 0 };
 
 typedef struct {
     int64_t beg, end;
-    char *ss, *se;
+    char *ss, *se, *ref, *alt;
     int tid;
 } tbx_intv_t;
 
@@ -96,6 +96,7 @@ int tbx_parse1(const tbx_conf_t *conf, size_t len, char *line, tbx_intv_t *intv)
     size_t i, b = 0;
     int id = 1;
     char *s;
+    kstring_t tmp = {0, 0, 0};
     intv->ss = intv->se = 0; intv->beg = intv->end = -1;
     for (i = 0; i <= len; ++i) {
         if (line[i] == '\t' || line[i] == 0) {
@@ -144,6 +145,11 @@ int tbx_parse1(const tbx_conf_t *conf, size_t len, char *line, tbx_intv_t *intv)
                 } else if ((conf->preset&0xffff) == TBX_VCF) {
                     if (id == 4) {
                         if (b < i) intv->end = intv->beg + (i - b);
+                        kputsn(line + b, i - b, ks_clear(&tmp));
+                        intv->ref = strdup(tmp.s);
+                    } else if (id == 5) {
+                        kputsn(line + b, i - b, ks_clear(&tmp));
+                        intv->alt = strdup(tmp.s);
                     } else if (id == 8) { // look for "END="
                         int c = line[i];
                         line[i] = 0;
@@ -211,7 +217,7 @@ static inline int get_intv(tbx_t *tbx, kstring_t *str, tbx_intv_t *intv, int is_
  *               -1 on EOF
  *            <= -2 on error
  */
-int tbx_readrec(BGZF *fp, void *tbxv, void *sv, int *tid, hts_pos_t *beg, hts_pos_t *end)
+int tbx_readrec(BGZF *fp, void *tbxv, void *sv, int *tid, hts_pos_t *beg, hts_pos_t *end, char **ref, char **alt)
 {
     tbx_t *tbx = (tbx_t *) tbxv;
     kstring_t *s = (kstring_t *) sv;
@@ -221,6 +227,8 @@ int tbx_readrec(BGZF *fp, void *tbxv, void *sv, int *tid, hts_pos_t *beg, hts_po
         if (get_intv(tbx, s, &intv, 0) < 0)
             return -2;
         *tid = intv.tid; *beg = intv.beg; *end = intv.end;
+        *ref = strdup(intv.ref); 
+        *alt = strdup(intv.alt);
     }
     return ret;
 }

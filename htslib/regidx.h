@@ -86,6 +86,8 @@ typedef struct regitr_t
     void *payload;
     char *seq;
     void *itr;
+    char *ref;
+    char *alt;
 }
 regitr_t;
 
@@ -109,7 +111,7 @@ regitr_t;
  *
  *  Return value: 0 on success, -1 to skip a record, -2 on fatal error.
  */
-typedef int  (*regidx_parse_f)(const char *line, char **chr_beg, char **chr_end, hts_pos_t *beg, hts_pos_t *end, void *payload, void *usr);
+typedef int  (*regidx_parse_f)(const char *line, char **chr_beg, char **chr_end, hts_pos_t *beg, hts_pos_t *end, char **ref_beg, char **ref_end, char **alt_beg, char **alt_end, void *payload, void *usr);
 typedef void (*regidx_free_f)(void *payload);
 
 /*
@@ -118,13 +120,13 @@ typedef void (*regidx_free_f)(void *payload);
  *      - lines starting with "#" are ignored
  */
 HTSLIB_EXPORT
-int regidx_parse_bed(const char*,char**,char**,hts_pos_t*,hts_pos_t*,void*,void*);   // CHROM or whitespace-sepatated CHROM,FROM,TO (0-based,right-open)
+int regidx_parse_bed(const char*,char**,char**,hts_pos_t*,hts_pos_t*,char**,char**,char**,char**,void*,void*);   // CHROM or whitespace-sepatated CHROM,FROM,TO (0-based,right-open)
 HTSLIB_EXPORT
-int regidx_parse_tab(const char*,char**,char**,hts_pos_t*,hts_pos_t*,void*,void*);   // CHROM or whitespace-separated CHROM,POS (1-based, inclusive)
+int regidx_parse_tab(const char*,char**,char**,hts_pos_t*,hts_pos_t*,char**,char**,char**,char**,void*,void*);   // CHROM or whitespace-separated CHROM,POS (1-based, inclusive)
 HTSLIB_EXPORT
-int regidx_parse_reg(const char*,char**,char**,hts_pos_t*,hts_pos_t*,void*,void*);   // CHROM, CHROM:POS, CHROM:FROM-TO, CHROM:FROM- (1-based, inclusive)
+int regidx_parse_reg(const char*,char**,char**,hts_pos_t*,hts_pos_t*,char**,char**,char**,char**,void*,void*);   // CHROM, CHROM:POS, CHROM:FROM-TO, CHROM:FROM- (1-based, inclusive)
 HTSLIB_EXPORT
-int regidx_parse_vcf(const char*,char**,char**,hts_pos_t*,hts_pos_t*,void*,void*);
+int regidx_parse_vcf(const char*,char**,char**,hts_pos_t*,hts_pos_t*,char**,char**,char**,char**,void*,void*);
 
 /*
  *  regidx_init() - creates new index
@@ -178,7 +180,7 @@ int regidx_insert(regidx_t *idx, char *line);
 HTSLIB_EXPORT
 int regidx_insert_list(regidx_t *idx, char *line, char delim);
 HTSLIB_EXPORT
-int regidx_push(regidx_t *idx, char *chr_beg, char *chr_end, hts_pos_t beg, hts_pos_t end, void *payload);
+int regidx_push(regidx_t *idx, char *chr_beg, char *chr_end, hts_pos_t beg, hts_pos_t end, char *ref_beg, char *ref_end, char *alt_beg, char *alt_end, void *payload);
 
 /*
  *  regidx_seq_names() - return list of all sequence names

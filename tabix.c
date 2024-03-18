@@ -57,6 +57,11 @@ typedef struct
 }
 args_t;
 
+typedef struct
+{
+    char *reg, *ref, *alt;
+} regions_t;
+
 static void HTS_FORMAT(HTS_PRINTF_FMT, 1, 2) HTS_NORETURN
 error(const char *format, ...)
 {
@@ -130,11 +135,11 @@ int file_type(const char *fname)
     return 0;
 }
 
-static char **parse_regions(char *regions_fname, char **argv, int argc, int *nregs)
+static regions_t *parse_regions(char *regions_fname, char **argv, int argc, int *nregs)
 {
     kstring_t str = {0,0,0};
     int iseq = 0, ireg = 0;
-    char **regs = NULL;
+    regions_t *regs = NULL;
     *nregs = argc;
 
     if ( regions_fname )
@@ -152,7 +157,7 @@ static char **parse_regions(char *regions_fname, char **argv, int argc, int *nre
         }
 
         (*nregs) += regidx_nregs(idx);
-        regs = (char**) malloc(sizeof(char*)*(*nregs));
+        regs = (regions_t*) malloc(sizeof(regions_t)*(*nregs));
         if (!regs) error_errno(NULL);
 
         int nseq;
@@ -168,8 +173,10 @@ static char **parse_regions(char *regions_fname, char **argv, int argc, int *nre
                 if (ksprintf(&str, "%s:%"PRIhts_pos"-%"PRIhts_pos, seqs[iseq], itr->beg+1, itr->end+1) < 0) {
                     error_errno(NULL);
                 }
-                regs[ireg] = strdup(str.s);
-                if (!regs[ireg]) error_errno(NULL);
+                regs[ireg].reg = strdup(str.s);
+                regs[ireg].ref = strdup(itr->ref);
+                regs[ireg].alt = strdup(itr->alt);
+                if (!regs[ireg].reg) error_errno(NULL);
                 ireg++;
             }
         }
@@ -182,26 +189,26 @@ static char **parse_regions(char *regions_fname, char **argv, int argc, int *nre
     {
         if ( argc )
         {
-            regs = (char**) malloc(sizeof(char*)*argc);
+            regs = (regions_t*) malloc(sizeof(regions_t)*argc);
             if (!regs) error_errno(NULL);
         }
         else
         {
-            regs = (char**) malloc(sizeof(char*));
+            regs = (regions_t*) malloc(sizeof(regions_t));
             if (!regs) error_errno(NULL);
-            regs[0] = strdup(".");
-            if (!regs[0]) error_errno(NULL);
+            regs[0].reg = strdup(".");
+            if (!regs[0].reg) error_errno(NULL);
             *nregs = 1;
         }
     }
 
     for (iseq=0; iseq<argc; iseq++, ireg++) {
-        regs[ireg] = strdup(argv[iseq]);
-        if (!regs[ireg]) error_errno(NULL);
+        regs[ireg].reg = strdup(argv[iseq]);
+        if (!regs[ireg].reg) error_errno(NULL);
     }
     return regs;
 }
-static int query_regions(args_t *args, tbx_conf_t *conf, char *fname, char **regs, int nregs)
+static int query_regions(args_t *args, tbx_conf_t *conf, char *fname, regions_t *regs, int nregs)
 {
     int i;
     htsThreadPool tpool = {NULL, 0};
@@ -271,7 +278,7 @@ static int query_regions(args_t *args, tbx_conf_t *conf, char *fname, char **reg
             for (i=0; i<nregs; i++)
             {
                 int ret, found = 0;
-                hts_itr_t *itr = bcf_itr_querys(idx,hdr,regs[i]);
+                hts_itr_t *itr = bcf_itr_querys(idx,hdr,regs[i].reg);
                 if (!itr) continue;
                 while ((ret = bcf_itr_next(fp, itr, rec)) >=0 )
                 {
@@ -287,7 +294,7 @@ static int query_regions(args_t *args, tbx_conf_t *conf, char *fname, char **reg
                         if ( !regidx_overlap(reg_idx,chr,rec->pos,rec->pos+rec->rlen-1, NULL) ) continue;
                     }
                     if (!found) {
-                        if (args->separate_regs) printf("%c%s\n", conf->meta_char, regs[i]);
+                        if (args->separate_regs) printf("%c%s\n", conf->meta_char, regs[i].reg);
                         found = 1;
                     }
                     if ( bcf_write(out,hdr,rec)!=0 ) {
@@ -339,6 +346,7 @@ static int query_regions(args_t *args, tbx_conf_t *conf, char *fname, char **reg
         if ( !args->header_only )
         {
             int nseq;
+            regitr_t *regitr = NULL;
             const char **seq = NULL;
             if ( reg_idx ) {
                 seq = tbx_seqnames(tbx, &nseq);
@@ -350,13 +358,14 @@ static int query_regions(args_t *args, tbx_conf_t *conf, char *fname, char **reg
             for (i=0; i<nregs; i++)
             {
                 int ret, found = 0;
-                hts_itr_t *itr = tbx_itr_querys(tbx, regs[i]);
+                hts_itr_t *itr = tbx_itr_querys(tbx, regs[i].reg);
                 if ( !itr ) continue;
                 while ((ret = tbx_itr_next(fp, tbx, itr, &str)) >= 0)
                 {
                     if ( reg_idx && !regidx_overlap(reg_idx,seq[itr->curr_tid],itr->curr_beg,itr->curr_end-1, NULL) ) continue;
+                    if ( strcmp(itr->curr_ref, regs[i].ref) != 0 || strcmp(itr->curr_alt, regs[i].alt) != 0 ) continue;
                     if (!found) {
-                        if (args->separate_regs) printf("%c%s\n", conf->meta_char, regs[i]);
+                        if (args->separate_regs) printf("%c%s\n", conf->meta_char, regs[i].reg);
                         found = 1;
                     }
                     if (puts(str.s) < 0) {
@@ -386,7 +395,11 @@ static int query_regions(args_t *args, tbx_conf_t *conf, char *fname, char **reg
         error_errno("hts_close returned non-zero status: %s", fname);
     }
 
-    for (i=0; i<nregs; i++) free(regs[i]);
+    for (i=0; i<nregs; i++) {
+        free(regs[i].reg);
+        free(regs[i].ref);
+        free(regs[i].alt);
+    }
     free(regs);
     RELEASE_TPOOL(tpool.pool);
     return 0;
@@ -762,7 +775,7 @@ int main(int argc, char *argv[])
     if ( argc > optind+1 || args.header_only || args.regions_fname || args.targets_fname )
     {
         int nregs = 0;
-        char **regs = NULL;
+        regions_t *regs = NULL;
         if ( !args.header_only )
             regs = parse_regions(args.regions_fname, argv+optind+1, argc-optind-1, &nregs);
         return query_regions(&args, &conf, fname, regs, nregs);

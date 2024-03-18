@@ -69,7 +69,7 @@ extern const tbx_conf_t tbx_conf_gff, tbx_conf_bed, tbx_conf_psltbl, tbx_conf_sa
     BGZF *hts_get_bgzfp(htsFile *fp);
 
     HTSLIB_EXPORT
-    int tbx_readrec(BGZF *fp, void *tbxv, void *sv, int *tid, hts_pos_t *beg, hts_pos_t *end);
+    int tbx_readrec(BGZF *fp, void *tbxv, void *sv, int *tid, hts_pos_t *beg, hts_pos_t *end, char **ref, char **alt);
 
 /// Build an index of the lines in a BGZF-compressed file
 /** The index struct returned by a successful call should be freed

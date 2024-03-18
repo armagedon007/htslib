@@ -4175,6 +4175,7 @@ int hts_itr_next(BGZF *fp, hts_itr_t *iter, void *r, void *data)
 {
     int ret, tid;
     hts_pos_t beg, end;
+    char *ref = NULL, *alt = NULL;
     if (iter == NULL || iter->finished) return -1;
     if (iter->read_rest) {
         if (iter->curr_off) { // seek to the start
@@ -4186,11 +4187,14 @@ int hts_itr_next(BGZF *fp, hts_itr_t *iter, void *r, void *data)
             }
             iter->curr_off = 0; // only seek once
         }
-        ret = iter->readrec(fp, data, r, &tid, &beg, &end);
+        ret = iter->readrec(fp, data, r, &tid, &beg, &end, &ref, &alt);
         if (ret < 0) iter->finished = 1;
         iter->curr_tid = tid;
         iter->curr_beg = beg;
         iter->curr_end = end;
+        iter->curr_ref = ref;
+        iter->curr_alt = alt;
+
         return ret;
     }
     // A NULL iter->off should always be accompanied by iter->finished.
@@ -4209,7 +4213,7 @@ int hts_itr_next(BGZF *fp, hts_itr_t *iter, void *r, void *data)
             }
             ++iter->i;
         }
-        if ((ret = iter->readrec(fp, data, r, &tid, &beg, &end)) >= 0) {
+        if ((ret = iter->readrec(fp, data, r, &tid, &beg, &end, &ref, &alt)) >= 0) {
             iter->curr_off = bgzf_tell(fp);
             if (tid != iter->tid || beg >= iter->end) { // no need to proceed
                 ret = -1; break;
@@ -4217,6 +4221,9 @@ int hts_itr_next(BGZF *fp, hts_itr_t *iter, void *r, void *data)
                 iter->curr_tid = tid;
                 iter->curr_beg = beg;
                 iter->curr_end = end;
+                iter->curr_ref = ref;
+                iter->curr_alt = alt;
+
                 return ret;
             }
         } else break; // end of file or error
@@ -4249,7 +4256,7 @@ int hts_itr_multi_next(htsFile *fd, hts_itr_t *iter, void *r)
             iter->curr_off = 0; // only seek once
         }
 
-        ret = iter->readrec(fp, fd, r, &tid, &beg, &end);
+        ret = iter->readrec(fp, fd, r, &tid, &beg, &end, NULL, NULL);
         if (ret < 0)
             iter->finished = 1;
 
@@ -4333,7 +4340,7 @@ int hts_itr_multi_next(htsFile *fd, hts_itr_t *iter, void *r)
                     // contain a few mapped reads, so scroll
                     // forward until finding the first unmapped read.
                     do {
-                        ret = iter->readrec(fp, fd, r, &tid, &beg, &end);
+                        ret = iter->readrec(fp, fd, r, &tid, &beg, &end, NULL, NULL);
                     } while (tid >= 0 && ret >=0);
 
                     if (ret < 0)
@@ -4438,7 +4445,7 @@ int hts_itr_multi_next(htsFile *fd, hts_itr_t *iter, void *r)
             }
         }
 
-        ret = iter->readrec(fp, fd, r, &tid, &beg, &end);
+        ret = iter->readrec(fp, fd, r, &tid, &beg, &end, NULL, NULL);
         if (ret < 0) {
             if (iter->is_cram && cram_eof(fp)) {
                 // Skip to end of range

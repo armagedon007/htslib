@@ -820,7 +820,7 @@ typedef struct hts_reglist_t {
     hts_pos_t min_beg, max_end;
 } hts_reglist_t;
 
-typedef int hts_readrec_func(BGZF *fp, void *data, void *r, int *tid, hts_pos_t *beg, hts_pos_t *end);
+typedef int hts_readrec_func(BGZF *fp, void *data, void *r, int *tid, hts_pos_t *beg, hts_pos_t *end, char *ref, char *alt);
 typedef int hts_seek_func(void *fp, int64_t offset, int where);
 typedef int64_t hts_tell_func(void *fp);
 
@@ -870,6 +870,7 @@ typedef struct hts_itr_t {
     hts_reglist_t *reg_list;
     int curr_tid, curr_reg, curr_intv;
     hts_pos_t curr_beg, curr_end;
+    char *curr_ref, *curr_alt;
     uint64_t curr_off, nocoor_off;
     hts_pair64_max_t *off;
     hts_readrec_func *readrec;

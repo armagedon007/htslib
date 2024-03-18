@@ -40,6 +40,7 @@
 typedef struct
 {
     hts_pos_t beg, end;
+    char *ref, *alt;
 }
 reg_t;
 
@@ -148,8 +149,9 @@ static int cmp_reg_ptrs2(const void *a, const void *b)
     return cmp_regs(*((reg_t**)a),*((reg_t**)b));
 }
 
-int regidx_push(regidx_t *idx, char *chr_beg, char *chr_end, hts_pos_t beg, hts_pos_t end, void *payload)
+int regidx_push(regidx_t *idx, char *chr_beg, char *chr_end, hts_pos_t beg, hts_pos_t end, char *ref_beg, char *ref_end, char *alt_beg, char *alt_end, void *payload)
 {
+    kstring_t ref = {0,0,0}, alt = {0,0,0};
     if (beg < 0) beg = 0;
     if (end < 0) end = 0;
     if ( beg > MAX_COOR_0 ) beg = MAX_COOR_0;
@@ -182,6 +184,16 @@ int regidx_push(regidx_t *idx, char *chr_beg, char *chr_end, hts_pos_t beg, hts_
         return -1;
     list->reg[list->nreg].beg = beg;
     list->reg[list->nreg].end = end;
+
+    kputsn(ref_beg, ref_end-ref_beg+1, ks_clear(&ref));
+    kputsn(alt_beg, alt_end-alt_beg+1, ks_clear(&alt));
+
+    list->reg[list->nreg].ref = strdup(ref.s);
+    list->reg[list->nreg].alt = strdup(alt.s);
+
+    free(ref.s);
+    free(alt.s);
+
     if ( idx->payload_size ) {
         if ( mreg != list->mreg ) {
             uint8_t *new_dat = realloc(list->dat, idx->payload_size*list->mreg);
@@ -198,12 +210,12 @@ int regidx_push(regidx_t *idx, char *chr_beg, char *chr_end, hts_pos_t beg, hts_
 int regidx_insert(regidx_t *idx, char *line)
 {
     if ( !line ) return 0;
-    char *chr_from, *chr_to;
+    char *chr_from, *chr_to, *ref_from, *ref_to, *alt_from, *alt_to;
     hts_pos_t beg,end;
-    int ret = idx->parse(line,&chr_from,&chr_to,&beg,&end,idx->payload,idx->usr);
+    int ret = idx->parse(line,&chr_from,&chr_to,&beg,&end,&ref_from,&ref_to,&alt_from,&alt_to,idx->payload,idx->usr);
     if ( ret==-2 ) return -1;   // error
     if ( ret==-1 ) return 0;    // skip the line
-    return regidx_push(idx, chr_from,chr_to,beg,end,idx->payload);
+    return regidx_push(idx, chr_from,chr_to,beg,end,ref_from,ref_to,alt_from,alt_to,idx->payload);
 }
 
 regidx_t *regidx_init_string(const char *str, regidx_parse_f parser, regidx_free_f free_f, size_t payload_size, void *usr_dat)
@@ -457,13 +469,15 @@ int regidx_overlap(regidx_t *regidx, const char *chr, hts_pos_t beg, hts_pos_t e
     regitr->seq = list->seq;
     regitr->beg = list->reg[ireg].beg;
     regitr->end = list->reg[ireg].end;
+    regitr->ref = list->reg[ireg].ref;
+    regitr->alt = list->reg[ireg].alt;
     if ( regidx->payload_size )
         regitr->payload = list->dat + regidx->payload_size*ireg;
 
     return 1;
 }
 
-int regidx_parse_bed(const char *line, char **chr_beg, char **chr_end, hts_pos_t *beg, hts_pos_t *end, void *payload, void *usr)
+int regidx_parse_bed(const char *line, char **chr_beg, char **chr_end, hts_pos_t *beg, hts_pos_t *end, char **ref_beg, char **ref_end, char **alt_beg, char **alt_end, void *payload, void *usr)
 {
     char *ss = (char*) line;
     while ( *ss && isspace_c(*ss) ) ss++;
@@ -492,10 +506,22 @@ int regidx_parse_bed(const char *line, char **chr_beg, char **chr_end, hts_pos_t
     *end = hts_parse_decimal(ss, &se, 0) - 1;
     if ( ss==se ) { hts_log_error("Could not parse bed line: %s", line); return -2; }
 
+    se++;
+    ss = se;
+    while ( *se && !isspace_c(*se) ) se++;
+    *ref_beg = ss;
+    *ref_end = se-1;
+
+    se++;
+    ss = se;
+    while ( *se && !isspace_c(*se) ) se++;
+    *alt_beg = ss;
+    *alt_end = se-1;
+
     return 0;
 }
 
-int regidx_parse_tab(const char *line, char **chr_beg, char **chr_end, hts_pos_t *beg, hts_pos_t *end, void *payload, void *usr)
+int regidx_parse_tab(const char *line, char **chr_beg, char **chr_end, hts_pos_t *beg, hts_pos_t *end, char **ref_beg, char **ref_end, char **alt_beg, char **alt_end, void *payload, void *usr)
 {
     char *ss = (char*) line;
     while ( *ss && isspace_c(*ss) ) ss++;
@@ -535,14 +561,14 @@ int regidx_parse_tab(const char *line, char **chr_beg, char **chr_end, hts_pos_t
     return 0;
 }
 
-int regidx_parse_vcf(const char *line, char **chr_beg, char **chr_end, hts_pos_t *beg, hts_pos_t *end, void *payload, void *usr)
+int regidx_parse_vcf(const char *line, char **chr_beg, char **chr_end, hts_pos_t *beg, hts_pos_t *end, char **ref_beg, char **ref_end, char **alt_beg, char **alt_end, void *payload, void *usr)
 {
-    int ret = regidx_parse_tab(line, chr_beg, chr_end, beg, end, payload, usr);
+    int ret = regidx_parse_tab(line, chr_beg, chr_end, beg, end, ref_beg, ref_end, alt_beg, alt_end, payload, usr);
     if ( !ret ) *end = *beg;
     return ret;
 }
 
-int regidx_parse_reg(const char *line, char **chr_beg, char **chr_end, hts_pos_t *beg, hts_pos_t *end, void *payload, void *usr)
+int regidx_parse_reg(const char *line, char **chr_beg, char **chr_end, hts_pos_t *beg, hts_pos_t *end, char **ref_beg, char **ref_end, char **alt_beg, char **alt_end, void *payload, void *usr)
 {
     char *ss = (char*) line;
     while ( *ss && isspace_c(*ss) ) ss++;
@@ -637,6 +663,10 @@ int regitr_overlap(regitr_t *regitr)
     regitr->seq = list->seq;
     regitr->beg = list->reg[i].beg;
     regitr->end = list->reg[i].end;
+
+    regitr->ref = list->reg[i].ref;
+    regitr->alt = list->reg[i].alt;
+    
     if ( itr->ridx->payload_size )
         regitr->payload = (char *)list->dat + itr->ridx->payload_size*i;
 
